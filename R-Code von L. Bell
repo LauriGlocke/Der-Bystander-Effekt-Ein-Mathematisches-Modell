@@ -1,0 +1,357 @@
+#------------------------------------------------------------
+# Bystander Effect 
+#------------------------------------------------------------
+
+# Bibliotheken laden
+library(dplyr)
+library(ggplot2)
+library(effsize)
+
+
+#------------------------------------------------------------
+# Formalsisierung
+#------------------------------------------------------------
+
+## Definition der Mediatoren-Funktionen
+
+#Diffusion of Responsibility
+#' @param x The number of bystander, on a scale from 0 to "infinite"
+Diffusion_of_Responsibility <- function(x) {
+  1 / (x + 1)
+}
+
+#Evalusation Apprehension
+#' @param x The number of bystander, on a scale from 0 to "infinite"
+#' @param c 
+Evaluation_Apprehension <- function(x, c) { 
+  1 / (1 + exp(-0.3 * (x - c)))
+}
+
+# Pluralistic Ignorance 
+#' @param x The number of bystander, on a scale from 0 to "infinite"
+Pluralistic_Ignorance <- function(x) {
+  exp(-(1/15) * log(9) * x)
+}
+
+
+## Zusammengesetzte Formel für die Hilfeleistungswahrscheinlichkeit
+Likelihood_to_help <- function(x, h, c) {
+  DoR <- Diffusion_of_Responsibility(x)
+  EA <- Evaluation_Apprehension(x, c)
+  PI <- Pluralistic_Ignorance(x)
+  
+  h * PI * DoR * (1 - EA)
+}
+
+
+#------------------------------------------------------------
+# Effektstärken
+#------------------------------------------------------------
+
+
+## Haupt-Effekt 
+
+set.seed(123) # Für Reproduzierbarkeit
+
+# Simulierten Datensatz erstellen und Hilfeleistungswahrscheinlichkeit berechnen
+
+# Simulation parameters
+
+n_half <- 50  # Anzahl der simulierten Personen für jede Gruppe (x = 0 und x > 0)
+upper_limit_x <- 1000  # Oberes Limit für x, wenn x > 0
+
+# Gruppe mit x = 0
+x_zero <- rep(0, n_half)
+h_zero <- rbeta(n_half, shape1 = 13.3125, shape2 = 4.4375)  # Random h values
+c_zero <- sample(10:30, n_half, replace = TRUE)  # Random c values
+
+# Gruppe mit x > 0
+x_positive <- sample(1:upper_limit_x, n_half, replace = TRUE)  # x-Werte größer als 0
+h_positive <- rbeta(n_half, shape1 = 13.3125, shape2 = 4.4375)  # Random h values
+c_positive <- sample(10:30, n_half, replace = TRUE)  # Random c values
+
+# Zusammenführen der Datensätze
+x_values <- c(x_zero, x_positive)
+h_values <- c(h_zero, h_positive)
+c_values <- c(c_zero, c_positive)
+
+
+# Creating the simulated dataset
+simulated_data <- data.frame(x = x_values, h = h_values, c = c_values)
+
+simulated_data$likelihood <- mapply(Likelihood_to_help, x = simulated_data$x, h = simulated_data$h, c = simulated_data$c)
+
+simulated_data["bystanders"] <- simulated_data$x > 0
+
+simulated_data$bystanders
+simulated_data$x
+simulated_data$h
+simulated_data$c
+
+cohen.d(simulated_data$likelihood, simulated_data$bystanders)
+
+
+## Vergleich mit der Literatur
+
+cat("Effektstärke aus Fischer et al. (2011): g = -0.35\n")
+
+
+
+## Mediations-Effekte (mit Beispielwert)
+
+
+# Setze Beispielwerte
+x_example <- 5
+x_no_bystanders <- 0
+c <- 20
+
+# Berechnungen für jeden Mediator ohne und mit Zuschauern durchführen
+DoR_no_bystanders <- Diffusion_of_Responsibility(x_no_bystanders)
+DoR_with_bystanders <- Diffusion_of_Responsibility(x_example)
+
+EA_no_bystanders <- Evaluation_Apprehension(x_no_bystanders, c)
+EA_with_bystanders <- Evaluation_Apprehension(x_example, c)
+
+PI_no_bystanders <- Pluralistic_Ignorance(x_no_bystanders)
+PI_with_bystanders <- Pluralistic_Ignorance(x_example)
+
+# Differenzen berechnen als Maß für Veränderungen/Effekte
+DoR_change <- DoR_with_bystanders - DoR_no_bystanders
+EA_change <- EA_with_bystanders - EA_no_bystanders
+PI_change <- PI_with_bystanders - PI_no_bystanders
+
+# Ergebnisse ausgeben
+cat("Veränderung in DoR von 0 zu", x_example, "Zuschauern:", DoR_change, "\n")
+cat("Veränderung in EA von 0 zu", x_example, "Zuschauern:", EA_change, "\n")
+cat("Veränderung in PI von 0 zu", x_example, "Zuschauern:", PI_change, "\n")
+
+
+#------------------------------------------------------------
+# Plots
+#------------------------------------------------------------
+
+
+## Haupt-Effekt
+
+set.seed(123) # Für Reproduzierbarkeit
+
+# Simuliere eine Zufallsstichprobe von 100 Personen 
+
+n_sample <- 100  # Number of people to simulate
+upper_limit <- 30  # Für bessere Visualisierung wird x auf max 30 eingeschrenkt
+x_sample <- sample(0:upper_limit, n_sample, replace = TRUE)  # Randomly choose x from 0 to upper_limit
+h_sample <- rbeta(n_sample, shape1 = 13.3125, shape2 = 4.4375)  # Random h values from a beta distribution
+c_sample <- sample(10:30, n_sample, replace = TRUE)
+
+# Berechne die Hilfeleistungswahrscheinlichkeit für jede Person in der Stichprobe
+likelihood_sample <- mapply(Likelihood_to_help, x = x_sample, h = h_sample, c = c_sample)
+
+# Erstelle einen Dataframe für die Plot-Daten
+plot_data <- data.frame(Bystander = x_sample, Likelihood = likelihood_sample)
+
+# Erstelle den Plot
+ggplot(plot_data, aes(x = Bystander, y = Likelihood)) +
+  geom_point() +
+  theme_minimal() +
+  xlab("Anzahl der Bystander") +
+  ylab("Wahrscheinlichkeit zu helfen") +
+  ggtitle("Hilfeleistungswahrscheinlichkeit und Anzahl der Bystander")
+
+# Linie zur Visualisierung
+ggplot(plot_data, aes(x = Bystander, y = Likelihood)) +
+  stat_summary(fun = mean, geom = "line") +
+  geom_point(alpha = 0.5) +
+  theme_minimal() +
+  xlab("Anzahl der Bystander") +
+  ylab("Durchschnittliche Wahrscheinlichkeit zu helfen") +
+  ggtitle("Durchschnittliche Hilfeleistungswahrscheinlichkeit und Anzahl der Bystander")
+
+# Boxplots
+ggplot(simulated_data, aes(x = factor(bystanders), y = likelihood)) +
+  geom_boxplot() +
+  theme_minimal() +
+  xlab("Anzahl der Bystander") +
+  ylab("Hilfeleistungswahrscheinlichkeit") +
+  ggtitle("Verteilung der Hilfeleistungswahrscheinlichkeit für verschiedene Bystander-Anzahlen")
+
+## Mediation 
+
+set.seed(123)  # Für Reproduzierbarkeit
+N <- 100
+upper_limit <- 50   
+x_values <- sample(0:upper_limit, n_sample, replace = TRUE)  # Randomly choose x from 0 to upper_limit
+h_values <- rbeta(n_sample, shape1 = 13.3125, shape2 = 4.4375)  # Random h values from a beta distribution
+c_values <- sample(10:30, n_sample, replace = TRUE)
+
+# Berechne die Mediatoren für jede Gruppengröße x
+DoR_values <- sapply(x_values, Diffusion_of_Responsibility)
+EA_values <- mapply(Evaluation_Apprehension, x_values, c_values)
+PI_values <- sapply(x_values, Pluralistic_Ignorance)
+
+# Erstelle Dataframes für die Plots
+data_DoR <- data.frame(x = x_values, y = DoR_values, Mediator = 'Diffusion of Responsibility')
+data_EA <- data.frame(x = x_values, y = EA_values, Mediator = 'Evaluation Apprehension')
+data_PI <- data.frame(x = x_values, y = PI_values, Mediator = 'Pluralistic Ignorance')
+
+# Kombiniere die Dataframes
+data_all <- rbind(data_DoR, data_EA, data_PI)
+
+# Erstelle die Graphen für die Veränderung der Mediatoren
+ggplot(data_all, aes(x = x, y = y, color = Mediator)) +
+  geom_point() +
+  geom_smooth(se = FALSE) +  # Fügt eine Glättungslinie ohne Standardfehler hinzu
+  theme_minimal() +
+  xlab("Anzahl der Bystander") +
+  ylab("Wert des Mediators") +
+  ggtitle("Veränderung der Mediatoren in Abhängigkeit von der Anzahl der Bystander") +
+  scale_color_manual(values = c("Diffusion of Responsibility" = "blue",
+                                "Evaluation Apprehension" = "red",
+                                "Pluralistic Ignorance" = "green")) +
+  theme(legend.title = element_blank())  # Entferne die Legendenüberschrift
+
+
+
+## Wahrscheinlichkeit, dass mind. eine Person eingreift
+
+# Initialisiere den DataFrame für die Ergebnisse
+results <- data.frame(
+  Bystander_Anzahl = integer(),
+  Durchschnittliche_Wahrscheinlichkeit = numeric(),
+  Mittlerer_C_Wert = numeric()
+)
+
+# Simulationsparameter
+n_sample <- 1000  # Anzahl der simulierten Personen pro Bystander-Anzahl
+max_bystanders <- 50  # Maximale Anzahl von Bystandern für die Simulation
+
+# Simulation über verschiedene Bystander-Anzahlen
+for(x in 0:max_bystanders) {
+  h_sample <- rbeta(n_sample, shape1 = 13.3125, shape2 = 4.4375) # Ziehe h aus einer Beta-Verteilung für jede Person
+  c_sample <- sample(10:30, n_sample, replace = TRUE) # Zufällige c-Werte für jede Person im Bereich [10, 30]
+  
+  # Berechne die Hilfeleistungswahrscheinlichkeit für jede Person in der Stichprobe
+  likelihood_sample <- mapply(Likelihood_to_help, x = rep(x, n_sample), h = h_sample, c = c_sample)
+  
+  # Berechne die Wahrscheinlichkeit, dass mindestens eine Person hilft, als 1 minus die Wahrscheinlichkeit, dass niemand hilft
+  P_no_one_helps <- prod(1 - likelihood_sample)
+  P_at_least_one_helps <- 1 - P_no_one_helps
+  
+  # Durchschnittliche Wahrscheinlichkeit zu helfen für diese Bystander-Anzahl
+  average_likelihood <- mean(likelihood_sample)
+  mittlerer_c_wert <- mean(c_sample)  # Berechnung des durchschnittlichen c-Werts für die Aufzeichnung
+  
+  # Ergebnisse speichern
+  results <- rbind(results, data.frame(Bystander_Anzahl = x, Durchschnittliche_Wahrscheinlichkeit = average_likelihood, Mittlerer_C_Wert = mittlerer_c_wert))
+}
+
+# Ergebnisse plotten
+ggplot(results, aes(x = Bystander_Anzahl, y = Durchschnittliche_Wahrscheinlichkeit)) +
+  geom_line() +
+  geom_point() +
+  theme_minimal() +
+  xlab("Anzahl der Bystander") +
+  ylab("Durchschnittliche Wahrscheinlichkeit zu helfen") +
+  ggtitle("Durchschnittliche Hilfeleistungswahrscheinlichkeit in Abhängigkeit von der Anzahl der Bystander")
+
+
+#------------------------------------------------------------
+# Der Fall Kitty-Genovese
+#------------------------------------------------------------
+
+## Wahrscheinlichkeit (nach dem Modell) das mind. eine der 38 Personen interveniert hätte
+
+set.seed(123)  # Für Reproduzierbarkeit
+
+# Parameters
+n_bystanders <- 37 # Excluding the focal bystander
+x_example <- 37    # Number of bystanders in the example
+n_total <- n_bystanders + 1 # Total number of people including the focal bystander
+
+# Generate h values for each bystander
+h_values <- rbeta(n_total, shape1 = 13.3125, shape2 = 4.4375)
+
+# Generate c values for each bystander
+c_values <- sample(10:30, n_total, replace = TRUE)
+
+# Likelihood to Help Function
+Likelihood_to_help <- function(x, h, c) {
+  DoR <- 1 / (x + 1)
+  EA <- 1 / (1 + exp(-0.3 * (x - c)))
+  PI <- exp(-(1/15) * log(9) * x)
+  
+  # Assuming 'h' is the intrinsic helping tendency, which affects the likelihood directly
+  likelihood <- h * PI * DoR * (1 - EA)
+  return(likelihood)
+}
+
+# Calculate likelihood of helping for each individual
+likelihoods <- mapply(Likelihood_to_help, x = rep(x_example, n_total), h = h_values, c = c_values)
+
+# Calculate the probability that at least one person helps
+# This is 1 minus the probability that no one helps
+P_none_helps <- prod(1 - likelihoods)
+P_at_least_one_helps <- 1 - P_none_helps
+
+# Output the probability
+P_at_least_one_helps
+
+
+
+## Plot
+
+# Simulieren von h-Werten für eine Gruppe von x_example Bystandern
+n_bystanders <- x_example
+h_values <- rbeta(n_bystanders + 1, shape1 = 13.3125, shape2 = 4.4375) # +1 für die "focal" Person
+# Ein individuelles h aus einer Beta-Verteilung für diese Person ziehen
+h_individual <- rbeta(1, shape1 = 13.3125, shape2 = 4.4375)
+# Ein individuelles c aus einer Beta-Verteilung für diese Person ziehen
+c_individual <- sample(10:30, n_sample, replace = TRUE)
+
+# Die Hilfeleistungswahrscheinlichkeit für diese Person berechnen
+individual_likelihood <- Likelihood_to_help(x_example, h_individual, c_individual)
+
+
+# Berechnen der individuellen Eingriffswahrscheinlichkeiten für alle 38 (37 Bystander + 1 focal Person)
+individual_likelihoods <- mapply(Likelihood_to_help, x = rep(x_example, n_bystanders + 1), h = h_values, c = c_values)
+
+# Erstelle einen Dataframe für den Plot
+plot_data <- data.frame(Person = 1:(n_bystanders + 1), Likelihood = individual_likelihoods)
+
+# Plot der Hilfeleistungswahrscheinlichkeit für jede Person
+ggplot(plot_data, aes(x = Person, y = Likelihood)) +
+  geom_point() +
+  theme_minimal() +
+  xlab("Person") +
+  ylab("Hilfeleistungswahrscheinlichkeit") +
+  ggtitle(paste("Hilfeleistungswahrscheinlichkeit bei", n_bystanders, "Bystandern"))
+
+#------------------------------------------------------------
+# Mit Werten experimentieren 
+#------------------------------------------------------------
+
+# Given values
+x <- 0  # Number of bystanders
+h <- 0.75  # Individual tendency to help
+c <- 10  # Parameter for Evaluation Apprehension
+
+# Calculating the likelihood to help
+DoR <- Diffusion_of_Responsibility(x)
+EA <- Evaluation_Apprehension(x, c)
+PI <- Pluralistic_Ignorance(x)
+
+likelihood_to_help <- h * PI * DoR * (1 - EA)
+likelihood_to_help
+
+
+# Given values
+x <- 0  # Number of bystanders
+h <- 0.75  # Individual tendency to help
+c <- 30  # Parameter for Evaluation Apprehension
+
+# Calculating the likelihood to help
+DoR <- Diffusion_of_Responsibility(x)
+EA <- Evaluation_Apprehension(x, c)
+PI <- Pluralistic_Ignorance(x)
+
+likelihood_to_help <- h * PI * DoR * (1 - EA)
+likelihood_to_help 
